@@ -30,7 +30,8 @@ services:
     plan: free
     region: oregon
     dockerContext: ./apps/ai-engine
-    dockerfilePath: ./Dockerfile
+    # dockerfilePath is relative to the repo root, not dockerContext.
+    dockerfilePath: ./apps/ai-engine/Dockerfile
     healthCheckPath: /health
     envVars:
       - fromGroup: scamshield-shared-secrets
