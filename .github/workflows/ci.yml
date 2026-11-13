@@ -1,0 +1,105 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  api:
+    name: API · typecheck & tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: scamshield
+          POSTGRES_PASSWORD: scamshield
+          POSTGRES_DB: scamshield_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U scamshield -d scamshield_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgresql://scamshield:scamshield@127.0.0.1:5432/scamshield_test?schema=public
+      TEST_DATABASE_URL: postgresql://scamshield:scamshield@127.0.0.1:5432/scamshield_test?schema=public
+      APP_ENCRYPTION_KEY: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+      INTERNAL_SERVICE_TOKEN: ci-internal-token
+      AI_ENGINE_ENABLED: "false"
+      EMAIL_ENABLED: "false"
+      REDIS_URL: ""
+      COOKIE_SECURE: "false"
+      THREAT_INTEL_DEV_FIXTURES: "true"
+      URLHAUS_ENABLED: "false"
+      PHISHTANK_ENABLED: "false"
+      ENABLE_API_DOCS: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build:packages
+      - run: npx prisma generate --schema apps/api/prisma/schema.prisma
+      - run: npx prisma migrate deploy --schema apps/api/prisma/schema.prisma
+      - run: npm run typecheck --workspace @scamshield/api
+      - run: npm run test --workspace @scamshield/api
+
+  web:
+    name: Web · typecheck & build
+    runs-on: ubuntu-latest
+    env:
+      API_INTERNAL_URL: http://127.0.0.1:4000
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build:packages
+      - run: npx tsc --noEmit --project apps/web/tsconfig.json
+      - run: npm run build --workspace @scamshield/web
+      - run: npm run test --workspace @scamshield/web
+
+  ai-engine:
+    name: AI engine · evaluation
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/ai-engine
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: apps/ai-engine/requirements.txt
+      - run: pip install -r requirements.txt
+      - run: python scripts/evaluate.py --json evaluation.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ai-engine-evaluation
+          path: apps/ai-engine/evaluation.json
+      - run: python -m pytest tests -q
+
+  docker:
+    name: Docker images build
+    runs-on: ubuntu-latest
+    needs: [api, web]
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -f apps/api/Dockerfile -t scamshield-api:ci .
+      - run: docker build -f apps/web/Dockerfile -t scamshield-web:ci .
+      - run: docker build -t scamshield-ai-engine:ci apps/ai-engine
