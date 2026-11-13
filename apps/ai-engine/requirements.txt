@@ -1,0 +1,11 @@
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.4
+python-multipart==0.0.20
+scikit-learn==1.6.0
+numpy==2.2.1
+opencv-python-headless==4.10.0.84
+rapidocr-onnxruntime==1.4.4
+pytesseract==0.3.13
+Pillow==11.0.0
+httpx==0.28.1

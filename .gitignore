@@ -1,0 +1,46 @@
+# Dependencies
+node_modules/
+.pnp/
+.pnp.js
+
+# Build output
+dist/
+build/
+.next/
+out/
+*.tsbuildinfo
+
+# Environment & secrets
+.env
+.env.*
+!.env.example
+.dev.vars
+
+# Local tooling
+.local/
+logs/
+*.log
+coverage/
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+apps/ai-engine/data/ml/*.pkl
+
+# Uploads / temporary scan artifacts (never committed)
+tmp/
+uploads/
+
+# Prisma
+apps/api/prisma/*.db

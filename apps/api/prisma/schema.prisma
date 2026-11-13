@@ -1,0 +1,452 @@
+// ScamShield AI database schema
+// PostgreSQL 16 + Prisma. UUID primary keys, explicit foreign keys and indexes.
+// Raw user content is NOT stored by default. `Scan.inputEncrypted` is only written
+// when the user explicitly consents, is AES-256-GCM encrypted by the API and is
+// purged after `contentRetentionUntil`.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum RiskLevel {
+  low
+  moderate
+  high
+  critical
+}
+
+enum ScanType {
+  message
+  url
+  screenshot
+  qr
+  email
+}
+
+enum ScanStatus {
+  queued
+  processing
+  completed
+  failed
+}
+
+enum FindingSeverity {
+  info
+  low
+  medium
+  high
+  critical
+}
+
+enum ReportStatus {
+  pending
+  verified
+  rejected
+  duplicate
+}
+
+enum ReportTargetType {
+  domain
+  url
+  phone
+  message
+  email
+}
+
+enum SubscriptionStatus {
+  active
+  canceled
+  past_due
+}
+
+enum AuthTokenPurpose {
+  email_verification
+  password_reset
+  mfa_email_challenge
+}
+
+model Role {
+  id          String     @id @default(uuid()) @db.Uuid
+  name        String     @unique
+  description String
+  permissions String[]   @default([])
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  users       UserRole[]
+
+  @@map("roles")
+}
+
+model User {
+  id                     String         @id @default(uuid()) @db.Uuid
+  email                  String         @unique
+  passwordHash           String
+  displayName            String
+  emailVerifiedAt        DateTime?
+  mfaEnabled             Boolean        @default(false)
+  mfaSecretEncrypted     String?
+  mfaRecoveryCodeHashes  String[]       @default([])
+  notificationPreferences Json          @default("{\"emailAlerts\":true,\"suspiciousScanAlerts\":true,\"reportStatusAlerts\":true,\"securityAlerts\":true,\"productUpdates\":false}")
+  privacyPreferences     Json           @default("{\"storeScanContent\":false,\"allowCommunityReports\":true,\"retentionDays\":30}")
+  failedLoginCount       Int            @default(0)
+  lockedUntil            DateTime?
+  suspendedAt            DateTime?
+  lastLoginAt            DateTime?
+  createdAt              DateTime       @default(now())
+  updatedAt              DateTime       @updatedAt
+  deletedAt              DateTime?
+
+  roles             UserRole[]
+  sessions          UserSession[]
+  authTokens        AuthToken[]
+  scans             Scan[]
+  feedback          ScanFeedback[]
+  reports           CommunityReport[]         @relation("ReportAuthor")
+  moderatedReports  CommunityReport[]         @relation("ReportModerator")
+  notifications     Notification[]
+  auditLogs         AuditLog[]
+  apiUsage          ApiUsage[]
+  subscriptions     UserSubscription[]
+  assignedRoles     UserRole[]                @relation("RoleAssigner")
+
+  @@index([createdAt])
+  @@index([emailVerifiedAt])
+  @@map("users")
+}
+
+model UserRole {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @db.Uuid
+  roleId     String   @db.Uuid
+  assignedAt DateTime @default(now())
+  assignedBy String?  @db.Uuid
+
+  user     User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role     Role  @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  assigner User? @relation("RoleAssigner", fields: [assignedBy], references: [id], onDelete: SetNull)
+
+  @@unique([userId, roleId])
+  @@index([roleId])
+  @@map("user_roles")
+}
+
+model UserSession {
+  id           String    @id @default(uuid()) @db.Uuid
+  userId       String    @db.Uuid
+  tokenHash    String    @unique
+  csrfHash     String
+  ipAddress    String?
+  userAgent    String?
+  createdAt    DateTime  @default(now())
+  lastUsedAt   DateTime  @default(now())
+  expiresAt    DateTime
+  revokedAt    DateTime?
+  revokedReason String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt])
+  @@index([expiresAt])
+  @@map("user_sessions")
+}
+
+model AuthToken {
+  id        String           @id @default(uuid()) @db.Uuid
+  userId    String           @db.Uuid
+  tokenHash String           @unique
+  purpose   AuthTokenPurpose
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, purpose])
+  @@map("auth_tokens")
+}
+
+model Scan {
+  id                String        @id @default(uuid()) @db.Uuid
+  userId            String?       @db.Uuid
+  type              ScanType
+  status            ScanStatus    @default(queued)
+  channel           String?
+  inputHash         String
+  inputPreview      String?
+  inputEncrypted    String?
+  contentConsent    Boolean       @default(false)
+  inputLength       Int           @default(0)
+  decodedValue      String?
+  riskScore         Int?
+  riskLevel         RiskLevel?
+  primaryCategory   String?
+  summary           String        @default("")
+  rulesVersion      String?
+  scorerVersion     String?
+  errorCode         String?
+  errorMessage      String?
+  aiExplanation     String?
+  aiGenerator       String?
+  aiModel           String?
+  aiExplainedAt     DateTime?
+  contentRetentionUntil DateTime?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  deletedAt         DateTime?
+
+  user       User?                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  result     ScanResult?
+  indicators DetectionIndicator[]
+  feedback   ScanFeedback?
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([status])
+  @@index([inputHash])
+  @@index([riskLevel])
+  @@index([primaryCategory])
+  @@map("scans")
+}
+
+model ScanResult {
+  id                String    @id @default(uuid()) @db.Uuid
+  scanId            String    @unique @db.Uuid
+  riskScore         Int
+  riskLevel         RiskLevel
+  primaryCategory   String
+  summary           String
+  extractedEntities Json
+  evidenceCoverage  Json
+  modelConfidence   Json?
+  engine            Json
+  limitations       String[]  @default([])
+  analysis          Json
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  scan Scan @relation(fields: [scanId], references: [id], onDelete: Cascade)
+
+  @@index([riskLevel])
+  @@map("scan_results")
+}
+
+model DetectionIndicator {
+  id                String          @id @default(uuid()) @db.Uuid
+  scanId            String          @db.Uuid
+  key               String
+  title             String
+  severity          FindingSeverity
+  evidence          String
+  detectionMethod   String
+  source            String
+  recommendedAction String
+  scoreImpact       Int             @default(0)
+  observedAt        DateTime        @default(now())
+
+  scan Scan @relation(fields: [scanId], references: [id], onDelete: Cascade)
+
+  @@index([scanId])
+  @@index([key])
+  @@index([source])
+  @@map("detection_indicators")
+}
+
+model ThreatSource {
+  id              String    @id @default(uuid()) @db.Uuid
+  name            String    @unique
+  kind            String
+  url             String?
+  reliabilityScore Int      @default(50)
+  enabled         Boolean   @default(true)
+  lastSyncedAt    DateTime?
+  config          Json?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  domains ThreatDomainSource[]
+
+  @@map("threat_sources")
+}
+
+model ThreatDomain {
+  id                String    @id @default(uuid()) @db.Uuid
+  domain            String    @unique
+  registrableDomain String?
+  riskLevel         RiskLevel @default(moderate)
+  category          String    @default("unknown")
+  verified          Boolean   @default(false)
+  active            Boolean   @default(true)
+  reportCount       Int       @default(0)
+  firstSeenAt       DateTime  @default(now())
+  lastSeenAt        DateTime  @default(now())
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  sources ThreatDomainSource[]
+  reports CommunityReport[]
+
+  @@index([verified, active])
+  @@index([lastSeenAt])
+  @@map("threat_domains")
+}
+
+model ThreatDomainSource {
+  id           String    @id @default(uuid()) @db.Uuid
+  domainId     String    @db.Uuid
+  sourceId     String    @db.Uuid
+  externalRef  String?
+  verified     Boolean   @default(false)
+  rawEvidence  Json?
+  reportedAt   DateTime  @default(now())
+  lastSeenAt   DateTime?
+
+  domain ThreatDomain @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  source ThreatSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  @@unique([domainId, sourceId, externalRef])
+  @@index([sourceId])
+  @@map("threat_domain_sources")
+}
+
+model CommunityReport {
+  id                String           @id @default(uuid()) @db.Uuid
+  reporterId        String?          @db.Uuid
+  targetType        ReportTargetType
+  target            String
+  targetHash        String
+  category          String
+  description       String
+  evidenceUrls      String[]         @default([])
+  status            ReportStatus     @default(pending)
+  verificationCount Int              @default(0)
+  moderatorNote     String?
+  reviewedById      String?          @db.Uuid
+  reviewedAt        DateTime?
+  duplicateOfId     String?          @db.Uuid
+  threatDomainId    String?          @db.Uuid
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  reporter     User?         @relation("ReportAuthor", fields: [reporterId], references: [id], onDelete: SetNull)
+  reviewedBy   User?         @relation("ReportModerator", fields: [reviewedById], references: [id], onDelete: SetNull)
+  duplicateOf  CommunityReport? @relation("ReportDuplicates", fields: [duplicateOfId], references: [id], onDelete: SetNull)
+  duplicates   CommunityReport[] @relation("ReportDuplicates")
+  threatDomain ThreatDomain? @relation(fields: [threatDomainId], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt(sort: Desc)])
+  @@index([targetHash])
+  @@index([reporterId])
+  @@map("community_reports")
+}
+
+model ScanFeedback {
+  id        String   @id @default(uuid()) @db.Uuid
+  scanId    String   @unique @db.Uuid
+  userId    String   @db.Uuid
+  verdict   String
+  comment   String?
+  createdAt DateTime @default(now())
+
+  scan Scan @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([verdict])
+  @@map("scan_feedback")
+}
+
+model Notification {
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @db.Uuid
+  type       String
+  title      String
+  body       String
+  metadata   Json?
+  readAt     DateTime?
+  emailSentAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt])
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("notifications")
+}
+
+model AuditLog {
+  id           String   @id @default(uuid()) @db.Uuid
+  actorId      String?  @db.Uuid
+  actorRole    String?
+  action       String
+  resourceType String
+  resourceId   String?
+  outcome      String
+  ipAddress    String?
+  userAgent    String?
+  metadata     Json?
+  createdAt    DateTime @default(now())
+
+  actor User? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([actorId])
+  @@index([action])
+  @@index([createdAt(sort: Desc)])
+  @@map("audit_logs")
+}
+
+model ApiUsage {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String?  @db.Uuid
+  provider   String
+  endpoint   String?
+  statusCode Int?
+  latencyMs  Int?
+  success    Boolean  @default(true)
+  errorCode  String?
+  createdAt  DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([provider, createdAt(sort: Desc)])
+  @@index([userId, createdAt])
+  @@map("api_usage")
+}
+
+model SubscriptionPlan {
+  id              String   @id @default(uuid()) @db.Uuid
+  slug            String   @unique
+  name            String
+  description     String
+  priceMonthlyInr Int      @default(0)
+  dailyScanLimit  Int      @default(10)
+  monthlyScanLimit Int     @default(100)
+  features        String[] @default([])
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  subscriptions UserSubscription[]
+
+  @@map("subscription_plans")
+}
+
+model UserSubscription {
+  id               String             @id @default(uuid()) @db.Uuid
+  userId           String             @db.Uuid
+  planId           String             @db.Uuid
+  status           SubscriptionStatus @default(active)
+  startedAt        DateTime           @default(now())
+  currentPeriodEnd DateTime?
+  canceledAt       DateTime?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  user User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan SubscriptionPlan @relation(fields: [planId], references: [id], onDelete: Restrict)
+
+  @@index([userId, status])
+  @@map("user_subscriptions")
+}
