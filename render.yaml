@@ -15,6 +15,8 @@ envVarGroups:
         generateValue: true
       - key: INTERNAL_SERVICE_TOKEN
         generateValue: true
+      - key: BOOTSTRAP_ADMIN_PASSWORD
+        generateValue: true
 
 databases:
   - name: scamshield-db
@@ -102,12 +104,10 @@ services:
         value: ""
       - key: VIRUSTOTAL_API_KEY
         value: ""
-      # One-time first-admin bootstrap. Enter a strong password when Render prompts.
-      # Remove BOOTSTRAP_ADMIN_PASSWORD from the service after the first successful sign-in.
+      # One-time first-admin bootstrap. The password is generated in the shared
+      # secret group; reveal it in Render, sign in, change it, then remove it.
       - key: BOOTSTRAP_ADMIN_EMAIL
-        sync: false
-      - key: BOOTSTRAP_ADMIN_PASSWORD
-        sync: false
+        value: nikhil-9618@users.noreply.github.com
 
   - type: web
     name: scamshield-web

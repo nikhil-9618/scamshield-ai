@@ -6,7 +6,7 @@ The repository includes a [Render Blueprint](../render.yaml) that creates:
 * `scamshield-api` — NestJS API (Docker, public HTTPS, Prisma migrations on boot)
 * `scamshield-ai` — FastAPI NLP/OCR/QR service (Docker, token-protected)
 * `scamshield-db` — Render Postgres, wired to the API as `DATABASE_URL`
-* a shared secret group with generated `APP_ENCRYPTION_KEY` and `INTERNAL_SERVICE_TOKEN`
+* a shared secret group with generated `APP_ENCRYPTION_KEY`, `INTERNAL_SERVICE_TOKEN`, and `BOOTSTRAP_ADMIN_PASSWORD`
 
 The free plan deliberately runs scans **inline** instead of through BullMQ. A free Render Key Value
 instance is in-memory, so a restart can lose queued scans and leave them stuck. To enable the queue
@@ -29,10 +29,12 @@ git push -u origin main
 1. Sign in at <https://dashboard.render.com>.
 2. **New → Blueprint**.
 3. Connect the GitHub repository and select the branch containing `render.yaml`.
-4. Render shows the four resources. When prompted for the two `sync: false` values, provide:
-   * `BOOTSTRAP_ADMIN_EMAIL` — the administrator email you will sign in with.
-   * `BOOTSTRAP_ADMIN_PASSWORD` — a unique password of at least 12 characters.
-5. Click **Apply**. Render creates the database, AI engine, API, and web app.
+4. Click **Apply**. Render creates the database, AI engine, API, and web app.
+5. The Blueprint generates `BOOTSTRAP_ADMIN_PASSWORD` inside the
+   `scamshield-shared-secrets` environment group. After the API is live, open **scamshield-api →
+   Environment → scamshield-shared-secrets → Show secret**, copy the generated password, and sign in
+   as `nikhil-9618@users.noreply.github.com`. Change the password in the security centre, then remove
+   `BOOTSTRAP_ADMIN_PASSWORD` from `render.yaml` and sync so it is no longer stored.
 
 The API container runs `prisma migrate deploy` before it starts listening. Migrations are retried up
 to six times with a five-second delay, so a database that is still accepting connections during the
@@ -58,10 +60,10 @@ Sign in with the bootstrap admin email and password.
 ## 4. Immediately after first sign-in
 
 * Enable **MFA** in the security centre.
-* Remove `BOOTSTRAP_ADMIN_PASSWORD` from the `scamshield-api` environment in Render (Environment →
-  delete the variable → save). The admin already exists, so the bootstrap will not run again.
-* If you entered a placeholder bootstrap email/password, change the admin password in the app before
-  removing the variable.
+* Remove `BOOTSTRAP_ADMIN_PASSWORD` from `render.yaml` and sync the Blueprint. The admin already
+  exists, so the bootstrap will not run again.
+* The bootstrap email is fixed at `nikhil-9618@users.noreply.github.com`. Change it in the app if
+  you want a different login address.
 * Create normal user accounts through registration. Email delivery is disabled by default; users can
   still use the product, but verification links are only written to API logs.
 
