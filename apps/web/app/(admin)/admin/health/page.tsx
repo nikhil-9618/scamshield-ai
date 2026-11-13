@@ -74,7 +74,7 @@ export default async function AdminHealthPage() {
       {health.redis.status === 'disabled' ? (
         <Alert variant="warning" title="Running without Redis">
           Scans are executed inline and throttling uses in-process counters. This is functional for a single instance but
-          does not survive restarts or horizontal scaling. Configure <code>REDIS_URL</code> for production.
+          does not survive restarts or horizontal scaling. Configure <code>REDIS_URL</code> for multi-instance production.
         </Alert>
       ) : null}
       {health.aiEngine.status !== 'ok' ? (

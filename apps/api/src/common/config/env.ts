@@ -21,6 +21,10 @@ const optionalString = z
 
 const URL_SCHEME = /^[a-z][a-z0-9+.-]*:\/\//i;
 
+/** Render can expose a referenced service URL as an empty string until the first sync completes. */
+const emptyToUndefined = (value: unknown): unknown =>
+  typeof value === 'string' && value.trim() === '' ? undefined : value;
+
 /**
  * Render (and similar platforms) expose a service hostname without a scheme.
  * Public origins must be HTTPS; internal service addresses default to HTTP.
@@ -50,13 +54,19 @@ function normalizeOriginList(value: string): string {
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: intish(4000, 1, 65535),
-  APP_ORIGIN: z
-    .string()
-    .min(1)
-    .transform(normalizePublicOrigin)
-    .pipe(z.string().url())
-    .default('http://localhost:3000'),
-  CORS_ORIGINS: z.string().default('http://localhost:3000').transform(normalizeOriginList),
+  APP_ORIGIN: z.preprocess(
+    emptyToUndefined,
+    z
+      .string()
+      .min(1)
+      .transform(normalizePublicOrigin)
+      .pipe(z.string().url())
+      .default('http://localhost:3000'),
+  ),
+  CORS_ORIGINS: z.preprocess(
+    emptyToUndefined,
+    z.string().default('http://localhost:3000').transform(normalizeOriginList),
+  ),
   ENABLE_API_DOCS: booleanish.default(false),
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
   TRUST_PROXY: intish(0, 0, 10),
@@ -80,12 +90,15 @@ const envSchema = z.object({
   SCAN_THROTTLE_LIMIT: intish(20, 1, 10_000),
   REPORT_THROTTLE_LIMIT: intish(5, 1, 10_000),
 
-  AI_ENGINE_URL: z
-    .string()
-    .min(1)
-    .transform(normalizeServiceUrl)
-    .pipe(z.string().url())
-    .default('http://localhost:8000'),
+  AI_ENGINE_URL: z.preprocess(
+    emptyToUndefined,
+    z
+      .string()
+      .min(1)
+      .transform(normalizeServiceUrl)
+      .pipe(z.string().url())
+      .default('http://localhost:8000'),
+  ),
   AI_ENGINE_ENABLED: booleanish.default(true),
   AI_ENGINE_TIMEOUT_MS: intish(8000, 500, 60_000),
 
@@ -130,6 +143,14 @@ export function loadEnv(): Env {
     throw new Error(`Invalid environment configuration:\n${problems}`);
   }
   const env = parsed.data;
+  if (env.NODE_ENV === 'production' && !process.env.APP_ORIGIN?.trim()) {
+    // Never fail the very first Render boot just because the sibling service
+    // URL has not propagated yet. Re-syncing the Blueprint replaces this value.
+    process.emitWarning(
+      'APP_ORIGIN was empty. Using http://localhost:3000 so the API can start; re-sync the Render Blueprint and redeploy once RENDER_EXTERNAL_URL is populated.',
+      'ScamShieldConfigWarning',
+    );
+  }
   if (env.NODE_ENV === 'production') {
     const missing: string[] = [];
     if (!env.APP_ENCRYPTION_KEY) missing.push('APP_ENCRYPTION_KEY');
@@ -150,7 +171,8 @@ export function isProduction(env: Env): boolean {
 }
 
 export function corsOrigins(env: Env): string[] {
-  return env.CORS_ORIGINS.split(',')
+  const configured = env.CORS_ORIGINS.split(',')
     .map((origin) => origin.trim())
     .filter(Boolean);
+  return configured.length > 0 ? configured : [env.APP_ORIGIN];
 }

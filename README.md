@@ -250,7 +250,8 @@ public.
 ### Render (Blueprint included)
 
 The repository ships a [Render Blueprint](render.yaml) that provisions the web app, API, AI engine,
-Postgres, Key Value and shared secrets in one stack. See [docs/render.md](docs/render.md) for the
+Postgres and shared secrets in one stack (scans run inline on the free plan; add Key Value for BullMQ
+on a paid plan). See [docs/render.md](docs/render.md) for the
 step-by-step guide, first-admin bootstrap and free-plan caveats (a free Render Postgres expires
 after 30 days).
 

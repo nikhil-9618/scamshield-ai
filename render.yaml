@@ -24,14 +24,6 @@ databases:
     region: oregon
 
 services:
-  # Optional queue/cache. The API and web app work inline if this service is removed.
-  - type: keyvalue
-    name: scamshield-redis
-    plan: free
-    region: oregon
-    ipAllowList: []
-    maxmemoryPolicy: allkeys-lru
-
   - type: web
     name: scamshield-ai
     runtime: docker
@@ -66,11 +58,8 @@ services:
         fromDatabase:
           name: scamshield-db
           property: connectionString
-      - key: REDIS_URL
-        fromService:
-          type: keyvalue
-          name: scamshield-redis
-          property: connectionString
+      # Scans run inline on the free plan. Add a Render Key Value instance and
+      # set REDIS_URL to enable BullMQ (see docs/render.md).
       # Free web services cannot receive private traffic, so use the public
       # HTTPS URLs Render assigns. envVarKey resolves after the first sync.
       - key: APP_ORIGIN
@@ -90,6 +79,8 @@ services:
           envVarKey: RENDER_EXTERNAL_URL
       - key: AI_ENGINE_ENABLED
         value: "true"
+      - key: AI_ENGINE_TIMEOUT_MS
+        value: "20000"
       - key: COOKIE_SECURE
         value: "true"
       - key: TRUST_PROXY

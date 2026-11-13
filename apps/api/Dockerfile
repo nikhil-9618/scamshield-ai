@@ -40,4 +40,4 @@ EXPOSE 4000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=25s --retries=3 \
     CMD sh -c 'curl -fsS "http://127.0.0.1:${PORT:-4000}/health" || exit 1'
 
-CMD ["sh", "-c", "npx prisma migrate deploy --schema apps/api/prisma/schema.prisma && node apps/api/dist/main.js"]
+CMD ["sh", "-c", "i=1; while [ \"$i\" -le 6 ]; do npx prisma migrate deploy --schema apps/api/prisma/schema.prisma && break; echo \"migration attempt $i failed; retrying in 5s\"; i=$((i+1)); sleep 5; done; [ \"$i\" -le 6 ] || exit 1; exec node apps/api/dist/main.js"]
