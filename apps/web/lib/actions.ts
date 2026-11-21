@@ -22,6 +22,7 @@ import {
 } from '@scamshield/validation';
 import { z } from 'zod';
 import { apiFetch } from './api';
+import { safeNextPath } from './safe-redirect';
 
 export interface ActionResult<T = undefined> {
   ok: boolean;
@@ -56,7 +57,7 @@ export async function loginAction(input: LoginInput & { next?: string }): Promis
     persistCookies: true,
   });
   if (!result.ok) return fail(result.error);
-  const next = input.next && input.next.startsWith('/') ? input.next : '/dashboard';
+  const next = safeNextPath(input.next) ?? '/dashboard';
   revalidatePath('/', 'layout');
   redirect(next);
 }

@@ -9,6 +9,7 @@ Design constraints:
 
 from __future__ import annotations
 
+import hmac
 import io
 import os
 import re
@@ -28,12 +29,15 @@ ALLOWED_MAGIC = {
     b"\xff\xd8\xff": "image/jpeg",
 }
 
-app = FastAPI(title="ScamShield AI Engine", version="1.0.0", docs_url=None, redoc_url=None)
+app = FastAPI(title="ScamShield AI Engine", version="1.0.0", docs_url=None, redoc_url=None, openapi_url=None)
 
 
 def require_token(x_internal_token: str | None = Header(default=None)) -> None:
     expected = os.getenv("INTERNAL_SERVICE_TOKEN")
-    if expected and x_internal_token != expected:
+    if not expected:
+        # Fail closed: a missing token must never make the internal API public.
+        raise HTTPException(status_code=503, detail="Internal service token is not configured.")
+    if not x_internal_token or not hmac.compare_digest(x_internal_token, expected):
         raise HTTPException(status_code=401, detail="Invalid internal service token.")
 
 

@@ -30,7 +30,12 @@ function parseSetCookie(raw: string): { name: string; value: string; maxAge?: nu
   const separator = pair.indexOf('=');
   if (separator <= 0) return null;
   const name = pair.slice(0, separator).trim();
-  const value = decodeURIComponent(pair.slice(separator + 1));
+  let value: string;
+  try {
+    value = decodeURIComponent(pair.slice(separator + 1));
+  } catch {
+    return null;
+  }
   const result: ReturnType<typeof parseSetCookie> = { name, value, path: '/' };
   if (!result) return null;
   for (const attribute of attributes) {
