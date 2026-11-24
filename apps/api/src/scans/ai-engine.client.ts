@@ -93,7 +93,9 @@ export class AiEngineClient {
         method: 'POST',
         headers: this.headers(),
         body: form,
-        signal: AbortSignal.timeout(Math.max(this.env.AI_ENGINE_TIMEOUT_MS, 20_000)),
+        // OCR is the first request after the free AI service wakes from idle;
+        // a cold start can take close to a minute, so do not fail the upload early.
+        signal: AbortSignal.timeout(Math.max(this.env.AI_ENGINE_TIMEOUT_MS, 60_000)),
       });
       const body = (await response.json().catch(() => null)) as {
         text?: string;
@@ -122,7 +124,7 @@ export class AiEngineClient {
         method: 'POST',
         headers: this.headers(),
         body: form,
-        signal: AbortSignal.timeout(Math.max(this.env.AI_ENGINE_TIMEOUT_MS, 15_000)),
+        signal: AbortSignal.timeout(Math.max(this.env.AI_ENGINE_TIMEOUT_MS, 60_000)),
       });
       const body = (await response.json().catch(() => null)) as {
         value?: string;
