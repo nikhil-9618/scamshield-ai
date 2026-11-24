@@ -148,7 +148,10 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
         : {
             statusCode: response.status,
             error: `HTTP_${response.status}`,
-            message: 'The request could not be completed. Please try again.',
+            message:
+              response.status === 502 || response.status === 503 || response.status === 504
+                ? 'The service is starting up. Wait a few seconds, then try again.'
+                : 'The request could not be completed. Please try again.',
           };
     return { ok: false, status: response.status, error };
   }

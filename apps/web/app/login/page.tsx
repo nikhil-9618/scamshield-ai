@@ -1,7 +1,9 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import { AuthShell } from '@/components/auth/auth-shell';
 import { LoginForm } from '@/components/auth/login-form';
+import { getSession } from '@/lib/session';
 import { safeNextPath } from '@/lib/safe-redirect';
 
 export const metadata: Metadata = { title: 'Sign in' };
@@ -9,6 +11,8 @@ export const metadata: Metadata = { title: 'Sign in' };
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ next?: string }> }) {
   const params = await searchParams;
   const next = safeNextPath(params.next) ?? undefined;
+  // Only a session the API still recognises may skip the form; a stale cookie must not.
+  if (await getSession()) redirect(next ?? '/dashboard');
   return (
     <AuthShell
       title="Welcome back"
